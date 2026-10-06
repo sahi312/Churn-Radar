@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Churn Radar · Telecom Customer Churn Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --paper:#F3F5F8; --card:#FFFFFF; --ink:#111B2E; --muted:#5B6678; --line:#DDE2EA;
+  --churn:#D1345B; --keep:#12908E; --warn:#E9A23B; --accent:#2D3FE0;
+  --radius:10px;
+  --display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --body:"DM Sans","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 var(--body)}
+h1,h2,h3{font-family:var(--display);margin:0;letter-spacing:-.01em}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+/* header */
+header{background:var(--ink);color:#fff;padding:14px 28px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between}
+.brand{display:flex;align-items:center;gap:12px}
+.brand svg{width:30px;height:30px}
+.brand h1{font-size:20px;font-weight:800}
+.brand small{display:block;color:#9FB0CC;font-size:12px;margin-top:-2px}
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.filters label{font-size:12px;color:#9FB0CC;display:flex;flex-direction:column;gap:2px}
+.filters select{background:#1B2942;border:1px solid #33466A;color:#fff;border-radius:8px;padding:6px 10px;min-width:150px}
+.pill{font-size:12px;padding:4px 10px;border-radius:99px;background:#1B2942;border:1px solid #33466A;color:#9FB0CC}
+.pill.ok{color:#7EE0C3;border-color:#2c7a68}.pill.bad{color:#ff9bb0;border-color:#8a3047}
+
+nav{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);display:flex;gap:4px;padding:0 20px;overflow-x:auto}
+nav button{background:none;border:0;padding:14px 16px;cursor:pointer;color:var(--muted);font-weight:500;border-bottom:3px solid transparent;white-space:nowrap}
+nav button[aria-selected=true]{color:var(--ink);border-color:var(--accent);font-weight:700}
+
+main{max-width:1280px;margin:0 auto;padding:24px 20px 60px}
+section{display:none}section.active{display:block}
+
+/* hero – churn rate as signal bars */
+.hero{display:grid;grid-template-columns:minmax(260px,1fr) 2fr;gap:20px;margin-bottom:20px}
+.signal{background:var(--ink);color:#fff;border-radius:var(--radius);padding:24px;display:flex;flex-direction:column;justify-content:space-between;min-height:230px}
+.signal .num{font:800 64px/1 var(--display)}
+.signal .num span{font-size:28px;color:#9FB0CC}
+.signal p{margin:6px 0 0;color:#B8C5DD;max-width:30ch}
+.bars{display:flex;align-items:flex-end;gap:6px;height:70px;margin-top:18px}
+.bars i{flex:1;background:#2A3A58;border-radius:3px}
+.bars i.on{background:var(--churn)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+.kpi .v{font:800 28px/1.1 var(--display)}
+.kpi .l{color:var(--muted);font-size:13px;margin-top:4px}
+.kpi.loss .v{color:var(--churn)}
+
+/* cards & grids */
+.grid{display:grid;gap:16px;grid-template-columns:repeat(12,1fr);margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+.card h2{font-size:17px;margin-bottom:2px}
+.card .sub{color:var(--muted);font-size:13px;margin:0 0 12px}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+.chart{position:relative;height:260px}
+.chart.tall{height:320px}
+.insight{border-left:4px solid var(--warn);background:#FFF8EA;padding:10px 14px;border-radius:0 8px 8px 0;margin-bottom:16px;font-size:14px}
+
+/* tables */
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;color:var(--muted);font-weight:500;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid #EEF1F5;white-space:nowrap}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.click{cursor:pointer}tr.click:hover{background:#F6F8FF}
+.tag{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:700}
+.tag.Yes,.tag.High{background:#FBE3E9;color:#A31F42}
+.tag.No,.tag.Low{background:#DDF3F1;color:#0B6866}
+.tag.Medium{background:#FDF0D8;color:#8A5A0B}
+.meter{display:inline-block;width:70px;height:8px;background:#E8ECF2;border-radius:99px;vertical-align:middle;margin-right:8px;overflow:hidden}
+.meter b{display:block;height:100%}
+
+/* heatmap */
+.heat{display:grid;gap:6px}
+.heat div{padding:12px 8px;border-radius:8px;text-align:center;font-weight:700}
+.heat .h{background:none;font-weight:500;color:var(--muted);font-size:13px}
+.heat small{display:block;font-weight:400;opacity:.85;font-size:11px}
+
+/* controls */
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+input[type=text],input[type=number],.row select,.form select{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff}
+.btn{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:9px 16px;font-weight:700;cursor:pointer}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn:disabled{opacity:.4;cursor:default}
+
+/* calculator */
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.form label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.form input,.form select{color:var(--ink)}
+.result{display:grid;grid-template-columns:200px 1fr;gap:24px;align-items:center;margin-top:18px}
+.dial{width:180px;height:180px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--c,#ccc) calc(var(--p,0)*1%),#E8ECF2 0)}
+.dial div{width:136px;height:136px;border-radius:50%;background:#fff;display:grid;place-items:center;text-align:center}
+.dial b{font:800 40px/1 var(--display)}
+.dial span{font-size:13px;color:var(--muted)}
+ul.clean{margin:6px 0 0;padding-left:18px}
+
+/* modal */
+dialog{border:0;border-radius:var(--radius);padding:24px;max-width:560px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+dialog::backdrop{background:rgba(17,27,46,.55)}
+dl{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;margin:14px 0}
+dt{color:var(--muted);font-size:12px}dd{margin:0 0 6px;font-weight:500}
+
+.empty{color:var(--muted);padding:30px;text-align:center}
+.err{background:#FBE3E9;color:#A31F42;padding:12px 16px;border-radius:8px;margin-bottom:16px;display:none}
+
+@media(max-width:900px){.hero{grid-template-columns:1fr}.c4,.c5,.c6,.c7,.c8{grid-column:span 12}.result{grid-template-columns:1fr}header{padding:12px 16px}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="20" width="5" height="9" rx="1.5" fill="#7EE0C3"/><rect x="11" y="14" width="5" height="15" rx="1.5" fill="#7EE0C3"/><rect x="19" y="8" width="5" height="21" rx="1.5" fill="#7EE0C3"/><rect x="27" y="3" width="3" height="26" rx="1.5" fill="#D1345B"/></svg>
+    <div><h1>Churn Radar</h1><small>Telecom customer churn analytics · Apache Hive</small></div>
+  </div>
+  <div class="filters">
+    <label>Contract<select id="f-contract"><option value="all">All contracts</option></select></label>
+    <label>Internet service<select id="f-internet_service"><option value="all">All services</option></select></label>
+    <label>State<select id="f-state"><option value="all">All states</option></select></label>
+    <button class="btn ghost" id="reset" style="margin-top:14px">Reset</button>
+    <span class="pill" id="status">connecting…</span>
+  </div>
+</header>
+
+<nav role="tablist" aria-label="Dashboard sections">
+  <button role="tab" data-tab="overview" aria-selected="true">Overview</button>
+  <button role="tab" data-tab="explorer" aria-selected="false">Customer explorer</button>
+  <button role="tab" data-tab="calc" aria-selected="false">Risk calculator</button>
+</nav>
+
+<main>
+<div class="err" id="err" role="alert"></div>
+
+<!-- OVERVIEW -->
+<section id="overview" class="active">
+  <div class="hero">
+    <div class="signal">
+      <div>
+        <div class="num"><span id="h-rate">–</span><span>%</span></div>
+        <p>of customers have left. Each lit bar is 10 percentage points.</p>
+      </div>
+      <div class="bars" id="bars"></div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="v" id="k-total">–</div><div class="l">Customers</div></div>
+      <div class="kpi"><div class="v" id="k-churned">–</div><div class="l">Churned customers</div></div>
+      <div class="kpi loss"><div class="v" id="k-loss">–</div><div class="l">Monthly revenue lost</div></div>
+      <div class="kpi"><div class="v" id="k-arpu">–</div><div class="l">Average bill per customer</div></div>
+      <div class="kpi"><div class="v" id="k-tc">–</div><div class="l">Average months before leaving</div></div>
+      <div class="kpi"><div class="v" id="k-tr">–</div><div class="l">Average tenure of those who stay</div></div>
+    </div>
+  </div>
+  <div class="insight" id="insight">Loading insight…</div>
+  <div class="grid">
+    <div class="card c6"><h2>Churn by contract</h2><p class="sub">Churn rate, %</p><div class="chart"><canvas id="ch-contract"></canvas></div></div>
+    <div class="card c6"><h2>Churn falls as customers stay longer</h2><p class="sub">Churn rate by months with the company</p><div class="chart"><canvas id="ch-tenure"></canvas></div></div>
+  </div>
+</section>
+
+<!-- SEGMENTS -->
+<section id="segments">
+  <div class="grid">
+    <div class="card c6"><h2>Contract × internet service</h2><p class="sub">Churn rate per segment (customer count underneath)</p><div id="heat" class="heat"></div></div>
+    <div class="card c6"><h2>Churn by monthly bill</h2><p class="sub">Churn rate, %</p><div class="chart"><canvas id="ch-charge"></canvas></div></div>
+    <div class="card c12">
+      <div class="row"><h2 style="margin-right:auto">Break churn down by</h2>
+        <select id="dim" aria-label="Dimension">
+          <option value="state">State</option><option value="gender">Gender</option><option value="senior_citizen">Senior citizen</option>
+          <option value="paperless_billing">Paperless billing</option><option value="tech_support">Tech support</option>
+          <option value="online_security">Online security</option><option value="streaming_tv">Streaming TV</option>
+          <option value="partner">Partner</option><option value="dependents">Dependents</option>
+        </select></div>
+      <div class="chart tall"><canvas id="ch-dim"></canvas></div>
+    </div>
+  </div>
+</section>
+
+<!-- SUPPORT -->
+<section id="support">
+  <div class="grid">
+    <div class="card c6"><h2>More tickets, more churn</h2><p class="sub">Churn rate by number of support tickets (5 = five or more)</p><div class="chart"><canvas id="ch-tix"></canvas></div></div>
+    <div class="card c6"><h2>Churned vs retained customers</h2><p class="sub">Average values per customer</p><div class="tablewrap"><table id="cmp"></table></div></div>
+  </div>
+</section>
+
+<!-- AT RISK -->
+<section id="risk">
+  <div class="grid">
+    <div class="card c5"><h2>Active customers by risk level</h2><p class="sub">Score from contract, tenure, tickets, payment and add-ons</p><div class="chart"><canvas id="ch-risk"></canvas></div><p id="risk-note" class="sub" style="margin-top:10px"></p></div>
+    <div class="card c7"><h2>Top customers to call first</h2><p class="sub">Active customers with the highest risk score. Select a row for details.</p>
+      <div class="tablewrap"><table id="tbl-risk"></table></div></div>
+  </div>
+</section>
+
+<!-- EXPLORER -->
+<section id="explorer">
+  <div class="card">
+    <div class="row">
+      <input type="text" id="q" placeholder="Search customer ID, e.g. C00123" aria-label="Search customer ID">
+      <select id="chfilter" aria-label="Churn status"><option value="">All customers</option><option value="Yes">Churned</option><option value="No">Active</option></select>
+      <button class="btn" id="search">Search</button>
+      <span class="sub" id="count" style="margin:0 0 0 auto"></span>
+    </div>
+    <div class="tablewrap"><table id="tbl-cust"></table></div>
+    <div class="row" style="margin-top:12px;justify-content:flex-end">
+      <button class="btn ghost" id="prev">Previous</button><span id="pg"></span><button class="btn ghost" id="next">Next</button>
+    </div>
+  </div>
+</section>
+
+<!-- CALCULATOR -->
+<section id="calc">
+  <div class="card">
+    <h2>What-if risk calculator</h2>
+    <p class="sub">Change a profile and see how the churn risk score moves. Uses the same rules as the Hive view v_churn_risk.</p>
+    <form class="form" id="form">
+      <label>Contract<select name="contract"><option>Month-to-month</option><option>One year</option><option>Two year</option></select></label>
+      <label>Internet service<select name="internet_service"><option>Fiber optic</option><option>DSL</option><option>No</option></select></label>
+      <label>Payment method<select name="payment_method"><option>Electronic check</option><option>Mailed check</option><option>Bank transfer</option><option>Credit card</option><option>UPI</option></select></label>
+      <label>Online security<select name="online_security"><option>No</option><option>Yes</option></select></label>
+      <label>Tech support<select name="tech_support"><option>No</option><option>Yes</option></select></label>
+      <label>Months with company<input type="number" name="tenure_months" value="6" min="0" max="120"></label>
+      <label>Support tickets<input type="number" name="ticket_count" value="2" min="0" max="20"></label>
+      <label>Dropped calls per month<input type="number" name="dropped_calls" value="4" min="0" max="50"></label>
+    </form>
+    <div class="result">
+      <div class="dial" id="dial"><div><div><b id="d-score">–</b><br><span id="d-level"></span></div></div></div>
+      <div><h3>Why this score</h3><ul class="clean" id="factors"></ul><h3 style="margin-top:14px">Suggested action</h3><ul class="clean" id="recs"></ul></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<dialog id="dlg"><div id="dlg-body"></div><div class="row" style="justify-content:flex-end;margin:10px 0 0"><button class="btn" id="dlg-close">Close</button></div></dialog>
+
+<script>
+let API = "/api";   // auto-detected in init(): same server first, then Flask on localhost:5000
+async function detectApi() {
+  const candidates = location.protocol === "file:" ? ["http://localhost:5000/api"] : ["/api", "http://localhost:5000/api"];
+  for (const base of candidates) {
+    try {
+      const r = await fetch(base + "/health");
+      if ((r.headers.get("content-type") || "").includes("json")) { API = base; return true; }
+    } catch (e) { /* try next */ }
+  }
+  return false;
+}
+const $ = s => document.querySelector(s);
+const fmt = n => n == null ? "–" : Number(n).toLocaleString("en-IN");
+const rupee = n => n == null ? "–" : "₹" + Number(n).toLocaleString("en-IN");
+const C = {churn:"#D1345B", keep:"#12908E", warn:"#E9A23B", accent:"#2D3FE0", grid:"#E6EAF0", ink:"#111B2E"};
+Chart.defaults.font.family = '"DM Sans", system-ui, sans-serif';
+Chart.defaults.color = "#5B6678";
+const charts = {};
+
+function qs(extra = {}) {
+  const p = new URLSearchParams(extra);
+  ["contract", "internet_service", "state"].forEach(k => { const v = $("#f-" + k).value; if (v !== "all") p.set(k, v); });
+  const s = p.toString(); return s ? "?" + s : "";
+}
+async function get(path, extra) {
+  const r = await fetch(API + path + qs(extra));
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+function showErr(e) { const el = $("#err"); el.textContent = "Could not load data: " + e.message; el.style.display = "block"; }
+
+function draw(id, cfg) {
+  const el = $("#" + id);
+  if (!el) return;
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(el, cfg);
+}
+const rateColor = v => v >= 40 ? C.churn : v >= 20 ? C.warn : C.keep;
+function barChart(id, rows, key = "churn_rate", horizontal = false, label = "Churn rate %") {
+  draw(id, {type: "bar", data: {labels: rows.map(r => r.segment), datasets: [{label, data: rows.map(r => r[key]),
+      backgroundColor: key === "churn_rate" ? rows.map(r => rateColor(r[key])) : C.accent, borderRadius: 5}]},
+    options: {indexAxis: horizontal ? "y" : "x", responsive: true, maintainAspectRatio: false,
+      plugins: {legend: {display: false}, tooltip: {callbacks: {afterLabel: c => rows[c.dataIndex].customers != null ? fmt(rows[c.dataIndex].customers) + " customers" : ""}}},
+      scales: {x: {grid: {display: horizontal}}, y: {grid: {color: C.grid}, beginAtZero: true}}}});
+}
+
+async function loadOverview() {
+  const [s, con, ten] = await Promise.all([get("/summary"), get("/churn-by/contract"), get("/tenure-curve")]);
+  $("#h-rate").textContent = s.churn_rate;
+  $("#bars").innerHTML = Array.from({length: 10}, (_, i) => `<i class="${s.churn_rate >= (i + 1) * 10 - 5 ? "on" : ""}" style="height:${30 + i * 7}%"></i>`).join("");
+  $("#k-total").textContent = fmt(s.total_customers); $("#k-churned").textContent = fmt(s.churned);
+  $("#k-loss").textContent = rupee(s.monthly_revenue_lost); $("#k-arpu").textContent = rupee(s.arpu);
+  $("#k-tc").textContent = s.avg_tenure_churned; $("#k-tr").textContent = s.avg_tenure_retained;
+  barChart("ch-contract", con);
+  draw("ch-tenure", {type: "line", data: {labels: ten.map(r => r.segment + " months"), datasets: [{label: "Churn rate %", data: ten.map(r => r.churn_rate), borderColor: C.churn, backgroundColor: "rgba(209,52,91,.12)", fill: true, tension: .3, pointRadius: 5}]},
+    options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}, scales: {y: {beginAtZero: true, grid: {color: C.grid}}, x: {grid: {display: false}}}}});
+  const worst = con[0], share = Math.round(100 * worst.revenue_lost / con.reduce((a, r) => a + r.revenue_lost, 0));
+  $("#insight").innerHTML = `<b>${worst.segment}</b> customers churn at <b>${worst.churn_rate}%</b> and account for <b>${share}%</b> of lost monthly revenue. Moving them to longer contracts is the biggest lever.`;
+}
+
+async function loadSegments() {
+  const [h, chg] = await Promise.all([get("/segments/heatmap"), get("/churn-by/charge_band")]);
+  const cons = ["Month-to-month", "One year", "Two year"], nets = ["Fiber optic", "DSL", "No"];
+  let html = ""; const cols = nets.length + 1;
+  const g = $("#heat"); g.style.gridTemplateColumns = `110px repeat(${nets.length},1fr)`;
+  html += `<div class="h"></div>` + nets.map(n => `<div class="h">${n === "No" ? "No internet" : n}</div>`).join("");
+  cons.forEach(c => {
+    html += `<div class="h" style="text-align:left;align-self:center">${c}</div>`;
+    nets.forEach(n => {
+      const r = h.find(x => x.contract === c && x.internet_service === n);
+      if (!r) { html += `<div style="background:#F0F2F6;color:#9AA3B2">–</div>`; return; }
+      const a = Math.min(1, r.churn_rate / 70);
+      html += `<div style="background:rgba(209,52,91,${.12 + a * .85});color:${a > .55 ? "#fff" : C.ink}">${r.churn_rate}%<small>${fmt(r.customers)} customers</small></div>`;
+    });
+  });
+  g.innerHTML = html;
+  barChart("ch-charge", chg);
+  await loadDim();
+}
+async function loadDim() { barChart("ch-dim", await get("/churn-by/" + $("#dim").value)); }
+
+async function loadSupport() {
+  const [t, cmp] = await Promise.all([get("/tickets-vs-churn"), get("/usage-compare")]);
+  draw("ch-tix", {type: "bar", data: {labels: t.map(r => r.tickets + (r.tickets === 5 ? "+" : "")), datasets: [{data: t.map(r => r.churn_rate), backgroundColor: t.map(r => rateColor(r.churn_rate)), borderRadius: 5}]},
+    options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}}, scales: {y: {beginAtZero: true, grid: {color: C.grid}, title: {display: true, text: "Churn rate %"}}, x: {title: {display: true, text: "Tickets raised"}, grid: {display: false}}}}});
+  const y = cmp.find(r => r.churn === "Yes") || {}, n = cmp.find(r => r.churn === "No") || {};
+  const rows = [["Monthly bill", rupee(n.charges), rupee(y.charges)], ["Call minutes per month", fmt(n.minutes), fmt(y.minutes)], ["Data used per month (GB)", n.data_gb, y.data_gb],
+                ["Dropped calls per month", n.dropped_calls, y.dropped_calls], ["Support tickets", n.tickets, y.tickets]];
+  $("#cmp").innerHTML = `<tr><th>Measure</th><th class="n">Retained</th><th class="n">Churned</th></tr>` + rows.map(r => `<tr><td>${r[0]}</td><td class="n">${r[1] ?? "–"}</td><td class="n"><b>${r[2] ?? "–"}</b></td></tr>`).join("");
+}
+
+const meter = s => `<span class="meter"><b style="width:${s}%;background:${s >= 55 ? C.churn : s >= 35 ? C.warn : C.keep}"></b></span>${s}`;
+async function loadRisk() {
+  const [d, top] = await Promise.all([get("/risk-distribution"), get("/at-risk", {limit: 20})]);
+  const order = ["High", "Medium", "Low"], colors = {High: C.churn, Medium: C.warn, Low: C.keep};
+  const rows = order.map(l => d.find(r => r.level === l) || {level: l, customers: 0, revenue_at_risk: 0});
+  draw("ch-risk", {type: "bar", data: {labels: rows.map(r => r.level), datasets: [{data: rows.map(r => r.customers), backgroundColor: rows.map(r => colors[r.level]), borderRadius: 5}]},
+    options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}, tooltip: {callbacks: {afterLabel: c => rupee(rows[c.dataIndex].revenue_at_risk) + " monthly revenue"}}}, scales: {y: {beginAtZero: true, grid: {color: C.grid}}, x: {grid: {display: false}}}}});
+  const hi = rows[0]; $("#risk-note").innerHTML = `<b>${fmt(hi.customers)}</b> high-risk customers put <b>${rupee(hi.revenue_at_risk)}</b> of monthly revenue at risk.`;
+  $("#tbl-risk").innerHTML = `<tr><th>Customer</th><th>State</th><th>Contract</th><th>Internet</th><th class="n">Months</th><th class="n">Bill</th><th class="n">Tickets</th><th>Risk</th></tr>` +
+    top.map(r => `<tr class="click" data-id="${r.customer_id}"><td>${r.customer_id}</td><td>${r.state}</td><td>${r.contract}</td><td>${r.internet_service}</td><td class="n">${r.tenure_months}</td><td class="n">${rupee(r.monthly_charges)}</td><td class="n">${r.ticket_count}</td><td>${meter(r.risk_score)}</td></tr>`).join("");
+}
+
+let page = 1;
+async function loadCustomers() {
+  const p = {page, size: 15, churn: $("#chfilter").value, q: $("#q").value.trim()};
+  Object.keys(p).forEach(k => p[k] === "" && delete p[k]);
+  try {
+    const d = await get("/customers", p);
+    $("#count").textContent = fmt(d.total) + " customers";
+    $("#pg").textContent = `Page ${d.page} of ${Math.max(1, Math.ceil(d.total / d.size))}`;
+    $("#prev").disabled = d.page <= 1; $("#next").disabled = d.page * d.size >= d.total;
+    $("#tbl-cust").innerHTML = d.rows.length ? `<tr><th>Customer</th><th>Gender</th><th>State</th><th>Contract</th><th>Internet</th><th>Payment</th><th class="n">Months</th><th class="n">Bill</th><th class="n">Tickets</th><th>Status</th></tr>` +
+      d.rows.map(r => `<tr class="click" data-id="${r.customer_id}"><td>${r.customer_id}</td><td>${r.gender}</td><td>${r.state}</td><td>${r.contract}</td><td>${r.internet_service}</td><td>${r.payment_method}</td><td class="n">${r.tenure_months}</td><td class="n">${rupee(r.monthly_charges)}</td><td class="n">${r.ticket_count}</td><td><span class="tag ${r.churn}">${r.churn === "Yes" ? "Churned" : "Active"}</span></td></tr>`).join("")
+      : `<tr><td class="empty">No customers match. Try a shorter ID or clear the filters.</td></tr>`;
+  } catch (e) { $("#tbl-cust").innerHTML = `<tr><td class="empty">${e.message}</td></tr>`; }
+}
+
+async function openCustomer(id) {
+  const c = await (await fetch(`${API}/customers/${id}`)).json();
+  const f = [["Contract", c.contract], ["Internet", c.internet_service], ["Payment", c.payment_method], ["State", c.state], ["Tenure", c.tenure_months + " months"],
+             ["Monthly bill", rupee(c.monthly_charges)], ["Total paid", rupee(c.total_charges)], ["Tickets", c.ticket_count], ["Avg. resolution", c.avg_resolution_hours + " h"],
+             ["Minutes / month", c.avg_minutes], ["Data / month", c.avg_data_gb + " GB"], ["Dropped calls", c.dropped_calls]];
+  $("#dlg-body").innerHTML = `<h2>${c.customer_id} <span class="tag ${c.churn}">${c.churn === "Yes" ? "Churned" : "Active"}</span></h2><dl>${f.map(x => `<div><dt>${x[0]}</dt><dd>${x[1]}</dd></div>`).join("")}</dl>
+    <button class="btn ghost" id="to-calc">Load into risk calculator</button>`;
+  $("#to-calc").onclick = () => { const fm = $("#form");
+    ["contract", "internet_service", "payment_method", "tenure_months"].forEach(k => fm.elements[k].value = c[k]);
+    fm.elements.online_security.value = c.online_security; fm.elements.tech_support.value = c.tech_support;
+    fm.elements.ticket_count.value = c.ticket_count; fm.elements.dropped_calls.value = c.dropped_calls;
+    $("#dlg").close(); show("calc"); };
+  $("#dlg").showModal();
+}
+
+let calcTimer;
+async function calc() {
+  const body = Object.fromEntries(new FormData($("#form")).entries());
+  try {
+    const r = await (await fetch(API + "/predict", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)})).json();
+    const col = r.level === "High" ? C.churn : r.level === "Medium" ? C.warn : C.keep;
+    $("#dial").style.setProperty("--p", r.risk_score); $("#dial").style.setProperty("--c", col);
+    $("#d-score").textContent = r.risk_score; $("#d-level").textContent = r.level + " risk";
+    $("#factors").innerHTML = r.factors.length ? r.factors.map(f => `<li><b>+${f.points}</b> ${f.reason}</li>`).join("") : "<li>No risk factors triggered</li>";
+    $("#recs").innerHTML = r.recommendations.map(x => `<li>${x}</li>`).join("");
+  } catch (e) { showErr(e); }
+}
+
+const loaders = {overview: loadOverview, segments: loadSegments, support: loadSupport, risk: loadRisk, explorer: loadCustomers, calc: calc};
+let current = "overview";
+async function show(tab) {
+  current = tab;
+  document.querySelectorAll("nav button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === tab));
+  document.querySelectorAll("main section").forEach(s => s.classList.toggle("active", s.id === tab));
+  $("#err").style.display = "none";
+  try { await loaders[tab](); } catch (e) { showErr(e); }
+}
+
+async function init() {
+  try {
+    if (!(await detectApi())) throw new Error("Backend not reachable. Start it with: cd backend && python app.py, then open http://localhost:5000");
+    const h = await (await fetch(API + "/health")).json();
+    const el = $("#status"); el.textContent = h.status === "ok" ? `Connected · ${h.mode === "hive" ? "Hive" : "demo data"}` : "Database unreachable";
+    el.className = "pill " + (h.status === "ok" ? "ok" : "bad");
+    const f = await (await fetch(API + "/filters")).json();
+    Object.entries(f).forEach(([k, vals]) => {
+      if (Array.isArray(vals)) {
+        vals.forEach(v => {
+          $("#f-" + k).insertAdjacentHTML(
+            "beforeend",
+            `<option>${v}</option>`
+          );
+        });
+      }
+    });
+    show("overview");
+  } catch (e) { $("#status").textContent = "API offline"; $("#status").className = "pill bad"; showErr(e); return; }
+}
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => show(b.dataset.tab));
+["contract", "internet_service", "state"].forEach(k => $("#f-" + k).onchange = () => { page = 1; show(current); });
+$("#reset").onclick = () => { ["contract", "internet_service", "state"].forEach(k => $("#f-" + k).value = "all"); show(current); };
+$("#dim").onchange = () => loadDim().catch(showErr);
+$("#search").onclick = () => { page = 1; loadCustomers(); };
+$("#q").onkeydown = e => { if (e.key === "Enter") { page = 1; loadCustomers(); } };
+$("#chfilter").onchange = () => { page = 1; loadCustomers(); };
+$("#prev").onclick = () => { page--; loadCustomers(); };
+$("#next").onclick = () => { page++; loadCustomers(); };
+$("#form").addEventListener("input", () => { clearTimeout(calcTimer); calcTimer = setTimeout(calc, 200); });
+$("#form").addEventListener("submit", e => e.preventDefault());
+document.addEventListener("click", e => { const tr = e.target.closest("tr.click"); if (tr) openCustomer(tr.dataset.id); });
+$("#dlg-close").onclick = () => $("#dlg").close();
+init();
+</script>
+</body>
+</html>

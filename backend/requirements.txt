@@ -1,0 +1,5 @@
+flask>=3.0
+flask-cors>=4.0
+duckdb>=1.0          # demo mode (runs without Hive)
+pyhive[hive_pure_sasl]>=0.7   # hive mode
+thrift>=0.16
